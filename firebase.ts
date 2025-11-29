@@ -1,19 +1,22 @@
+// FIX: Add a triple-slash directive to include Vite's client types, which defines `import.meta.env` for TypeScript.
+/// <reference types="vite/client" />
+
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// TODO: 请将下方的占位符替换为您自己的 Firebase 项目配置
-// 您可以从 Firebase 项目的控制台 -> 项目设置 中找到这些信息
-// 在当前预览环境中，必须直接提供配置，因为没有构建过程来注入环境变量。
+// TODO: 请在您的 Netlify 部署环境中设置以下环境变量。
+// Netlify > Site settings > Build & deploy > Environment > Environment variables
+// 重要：所有变量名必须以 "VITE_" 开头，Vite 才会将其暴露给前端代码。
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY", // 替换为您的 API Key
-  authDomain: "YOUR_AUTH_DOMAIN", // 替换为您的 Auth Domain
-  projectId: "YOUR_PROJECT_ID", // 替换为您的 Project ID
-  storageBucket: "YOUR_STORAGE_BUCKET", // 替换为您的 Storage Bucket
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // 替换为您的 Messaging Sender ID
-  appId: "YOUR_APP_ID", // 替换为您的 App ID
-  measurementId: "YOUR_MEASUREMENT_ID" // 替换为您的 Measurement ID
+  apiKey: import.meta.env.VITE_API_KEY,
+  authDomain: import.meta.env.VITE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_APP_ID,
+  measurementId: import.meta.env.VITE_MEASUREMENT_ID
 };
 
 
