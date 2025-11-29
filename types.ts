@@ -37,7 +37,7 @@ export interface Property {
     settings: PropertySettings;
     oneTimeExpenses: OneTimeExpense[];
     monthlyInputs: Record<number, Partial<MonthlyData>>;
-    createdAt?: any; // Used for sorting
+    createdAt?: any; // 用于 Firestore 排序
 }
 
 export interface SimulationResult {

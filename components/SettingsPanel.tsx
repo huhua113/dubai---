@@ -14,6 +14,7 @@ interface PropertyManagerProps {
 const PropertyManager: React.FC<PropertyManagerProps> = ({ properties, activePropertyId, onSelect, onRename, onAdd, onDelete }) => {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [tempName, setTempName] = useState('');
+    const isLastProperty = properties.length <= 1;
 
     const handleStartEdit = (prop: Property) => {
         setEditingId(prop.id);
@@ -40,7 +41,7 @@ const PropertyManager: React.FC<PropertyManagerProps> = ({ properties, activePro
                 {properties.map(prop => (
                     <div
                         key={prop.id}
-                        className={`group flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${activePropertyId === prop.id ? 'bg-white shadow-sm' : 'hover:bg-brand-blue-dark/10'}`}
+                        className={`group flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${activePropertyId === prop.id ? 'bg-white shadow-sm' : 'hover:bg-brand-blue-dark/10'} ${isLastProperty ? 'border-2 border-dashed border-slate-300' : ''}`}
                         onClick={() => onSelect(prop.id)}
                     >
                         <div className="flex items-center gap-2">
@@ -61,7 +62,14 @@ const PropertyManager: React.FC<PropertyManagerProps> = ({ properties, activePro
                         </div>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={(e) => { e.stopPropagation(); handleStartEdit(prop); }} className="p-1 hover:text-brand-blue-dark"><Edit className="w-3 h-3"/></button>
-                            <button onClick={(e) => { e.stopPropagation(); onDelete(prop.id); }} className="p-1 hover:text-red-500"><Trash2 className="w-3 h-3"/></button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onDelete(prop.id); }} 
+                                className={`p-1 ${!isLastProperty ? 'hover:text-red-500' : 'text-slate-300 cursor-not-allowed'}`}
+                                disabled={isLastProperty}
+                                title={isLastProperty ? "无法删除最后一个房产" : "删除房产"}
+                            >
+                                <Trash2 className="w-3 h-3"/>
+                            </button>
                         </div>
                     </div>
                 ))}

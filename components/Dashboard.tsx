@@ -47,20 +47,20 @@ const createNewProperty = (name: string): Omit<Property, 'id'> => {
             { id: '12', name: '保洁', amount: 400, category: 'post' },
         ],
         monthlyInputs: {
-            1: { dewa: 2130, ac: 2423.38, serviceFees: 1146, loanPayment: 5552.65 },
-            2: { dewa: 542.33, ac: 587.06, serviceFees: 4915.71, loanPayment: 5552.65, rentalIncome: 5880 },
+            0: { dewa: 2130, ac: 2423.38, serviceFees: 1146, loanPayment: 5552.65 },
+            1: { dewa: 542.33, ac: 587.06, serviceFees: 4915.71, loanPayment: 5552.65, rentalIncome: 5880 },
+            2: { loanPayment: 5552.65, rentalIncome: 13000 },
             3: { loanPayment: 5552.65, rentalIncome: 13000 },
-            4: { loanPayment: 5552.65, rentalIncome: 13000 },
-            5: { serviceFees: 4915.71, loanPayment: 5552.65, rentalIncome: 13000 },
+            4: { serviceFees: 4915.71, loanPayment: 5552.65, rentalIncome: 13000 },
+            5: { loanPayment: 5552.65, rentalIncome: 13000 },
             6: { loanPayment: 5552.65, rentalIncome: 13000 },
-            7: { loanPayment: 5552.65, rentalIncome: 13000 },
-            8: { serviceFees: 4915.71, loanPayment: 5552.65, rentalIncome: 13000 },
+            7: { serviceFees: 4915.71, loanPayment: 5552.65, rentalIncome: 13000 },
+            8: { loanPayment: 5552.65, rentalIncome: 13000 },
             9: { loanPayment: 5552.65, rentalIncome: 13000 },
-            10: { loanPayment: 5552.65, rentalIncome: 13000 },
-            11: { serviceFees: 4915.71, loanPayment: 5552.65, rentalIncome: 13000 },
-            12: { loanPayment: 5552.65, rentalIncome: 13000 },
+            10: { serviceFees: 4915.71, loanPayment: 5552.65, rentalIncome: 13000 },
+            11: { loanPayment: 5552.65, rentalIncome: 13000 },
+            12: { loanPayment: 5552.65 },
             13: { loanPayment: 5552.65 },
-            14: { loanPayment: 5552.65 },
         }
     };
 };
@@ -75,9 +75,22 @@ const Dashboard: React.FC = () => {
   const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>('none');
   const [chartRange, setChartRange] = useState<ChartRange>('yearly');
 
+  const addDefaultProperty = useCallback(async () => {
+    const defaultProperty = createNewProperty("示例房产 (Business Bay)");
+    await addDoc(propertiesCollection, defaultProperty);
+  }, []);
+
   useEffect(() => {
     const q = query(propertiesCollection, orderBy("createdAt", "asc"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        // 如果是首次加载且数据库为空，则添加一个默认房产
+        if (loading && querySnapshot.empty) {
+            addDefaultProperty();
+            // 立即返回。快照监听器将在添加新房产后再次触发，
+            // 届时我们将把 loading 设置为 false。
+            return;
+        }
+
         const propsData: Property[] = [];
         querySnapshot.forEach((doc) => {
             propsData.push({ ...doc.data(), id: doc.id } as Property);
@@ -91,17 +104,17 @@ const Dashboard: React.FC = () => {
             setLoading(false);
         }
 
-        // If active property is deleted elsewhere, deselect it
+        // 如果当前选中的房产被其他用户删除了，则更新选中的房产
         if (activePropertyId && !propsData.some(p => p.id === activePropertyId)) {
             setActivePropertyId(propsData.length > 0 ? propsData[0].id : null);
         }
     }, (error) => {
-        console.error("Error fetching properties:", error);
+        console.error("从 Firestore 获取房产数据时出错:", error);
         setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [loading, activePropertyId]);
+  }, [loading, activePropertyId, addDefaultProperty]);
 
 
   const activeProperty = useMemo(() => properties.find(p => p.id === activePropertyId), [properties, activePropertyId]);
@@ -136,19 +149,29 @@ const Dashboard: React.FC = () => {
   }, [properties.length]);
 
   const handleDeleteProperty = useCallback(async (id: string) => {
+    if (properties.length <= 1) {
+      alert("为保证应用中有数据可供浏览，无法删除最后一个房产。");
+      return;
+    }
+    
     if (!window.confirm('您确定要删除此房产吗？此操作无法撤销。')) return;
     
-    // Optimistically update UI for smoother experience
-    if (activePropertyId === id) {
-        const currentIndex = properties.findIndex(p => p.id === id);
-        let newActiveId: string | null = null;
-        if (properties.length > 1) {
-            newActiveId = currentIndex > 0 ? properties[currentIndex - 1].id : properties[1].id;
+    try {
+        // 为了更好的用户体验，在删除前就切换选中的房产
+        if (activePropertyId === id) {
+            const currentIndex = properties.findIndex(p => p.id === id);
+            let newActiveId: string | null = null;
+            if (properties.length > 1) {
+                newActiveId = currentIndex > 0 ? properties[currentIndex - 1].id : properties[1].id;
+            }
+            setActivePropertyId(newActiveId);
         }
-        setActivePropertyId(newActiveId);
-    }
 
-    await deleteDoc(doc(db, 'properties', id));
+        await deleteDoc(doc(db, 'properties', id));
+    } catch (error) {
+        console.error("删除房产失败:", error);
+        alert("删除房产时出错。请检查您的网络连接或 Firestore 安全规则，然后在控制台中查看详细错误。");
+    }
   }, [properties, activePropertyId]);
 
 
@@ -424,19 +447,30 @@ const Dashboard: React.FC = () => {
     
     if (properties.length === 0) {
         return (
-             <div className="flex-1 flex items-center justify-center p-4">
-                 <div className="text-center">
-                     <h3 className="font-bold text-lg text-brand-slate mb-2">欢迎使用!</h3>
-                     <p className="text-slate-500 mb-4">您还没有任何房产，请在侧边栏添加您的第一处房产。</p>
+             <div className="flex-1 flex items-center justify-center p-4 md:p-8">
+                 <div className="w-full max-w-lg text-center p-10 border-2 border-dashed border-slate-300 rounded-2xl bg-white/50">
+                     <h3 className="font-bold text-xl text-brand-slate mb-2">欢迎使用!</h3>
+                     <p className="text-slate-500 mb-6">您的投资组合是空的，请添加您的第一处房产。</p>
                      <button 
                         onClick={handleAddProperty}
-                        className="bg-brand-blue text-white font-semibold px-6 py-2 rounded-lg hover:bg-brand-blue-dark transition-colors shadow-sm"
+                        className="bg-brand-blue text-white font-semibold px-8 py-3 rounded-lg hover:bg-brand-blue-dark transition-colors shadow-lg shadow-brand-blue/30"
                      >
                          添加第一处房产
                      </button>
                  </div>
             </div>
         );
+    }
+
+    if (!activeProperty) {
+      return (
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="text-center">
+            <h3 className="font-bold text-lg text-brand-slate mb-2">请选择一处房产</h3>
+            <p className="text-slate-500">从左侧的列表中选择一处房产以查看其详细信息。</p>
+          </div>
+        </div>
+      )
     }
 
     return (
@@ -516,7 +550,7 @@ const Dashboard: React.FC = () => {
                                         <Legend wrapperStyle={{fontSize: "12px"}} />
                                         <Bar yAxisId="left" dataKey="income" name="收入" fill="#22C55E" radius={[4, 4, 0, 0]} />
                                         <Bar yAxisId="left" dataKey="expense" name="支出" fill="#EF4444" radius={[4, 4, 0, 0]} />
-                                        <Brush dataKey="name" height={25} stroke="#0EA5E9" fill="#E0F2FE" />
+                                        {chartData.length > 12 && <Brush dataKey="name" height={25} stroke="#0EA5E9" fill="#E0F2FE" />}
                                     </ComposedChart>
                                 </ResponsiveContainer>
                             </div>
