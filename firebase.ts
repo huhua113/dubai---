@@ -3,16 +3,17 @@ import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// TODO: 请将此处替换为您自己的 Firebase 项目配置
+// TODO: 请将下方的占位符替换为您自己的 Firebase 项目配置
 // 您可以从 Firebase 项目的控制台 -> 项目设置 中找到这些信息
+// 在当前预览环境中，必须直接提供配置，因为没有构建过程来注入环境变量。
 const firebaseConfig = {
-  apiKey: "AIzaSyAFUC-Vc-vBJITVnh2oM369ONG71RSGyXE",
-  authDomain: "kolckm-bca2f.firebaseapp.com",
-  projectId: "kolckm-bca2f",
-  storageBucket: "kolckm-bca2f.firebasestorage.app",
-  messagingSenderId: "840830636040",
-  appId: "1:840830636040:web:91a511ed8453eb11d401bd",
-  measurementId: "G-4DREL3119C"
+  apiKey: "YOUR_API_KEY", // 替换为您的 API Key
+  authDomain: "YOUR_AUTH_DOMAIN", // 替换为您的 Auth Domain
+  projectId: "YOUR_PROJECT_ID", // 替换为您的 Project ID
+  storageBucket: "YOUR_STORAGE_BUCKET", // 替换为您的 Storage Bucket
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // 替换为您的 Messaging Sender ID
+  appId: "YOUR_APP_ID", // 替换为您的 App ID
+  measurementId: "YOUR_MEASUREMENT_ID" // 替换为您的 Measurement ID
 };
 
 
