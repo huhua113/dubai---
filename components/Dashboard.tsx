@@ -309,6 +309,11 @@ const Dashboard: React.FC = () => {
     URL.revokeObjectURL(url);
 }, [detailedPortfolioResults]);
 
+  const navItems = [
+    { id: 'dashboard', label: '概览', icon: <LayoutDashboard className="w-5 h-5" /> },
+    { id: 'upfront', label: '一次性费用', icon: <Wallet className="w-5 h-5" /> },
+    { id: 'recurring', label: '周期性费用', icon: <Repeat className="w-5 h-5" /> },
+  ];
 
   const renderHeader = () => (
     <div className="p-4 md:p-6 flex justify-between items-center">
@@ -566,6 +571,26 @@ const Dashboard: React.FC = () => {
 
       <main className="flex-1 flex flex-col overflow-auto pb-20 md:pb-0">
         {renderHeader()}
+        
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex items-center border-b border-t border-slate-200 px-6 bg-white/50 sticky top-0 z-10">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setMainView(item.id as MainView)}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold transition-colors relative 
+                  ${mainView === item.id 
+                    ? 'text-brand-blue-dark' 
+                    : 'text-slate-500 hover:text-brand-blue'
+                  }`}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+                {mainView === item.id && <div className="absolute bottom-0 left-0 right-0 h-1 bg-brand-gold rounded-t-full"></div>}
+              </button>
+            ))}
+        </div>
+
         {renderContent()}
       </main>
 
