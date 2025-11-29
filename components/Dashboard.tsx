@@ -8,7 +8,7 @@ import MobileNav from './MobileNav';
 import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush } from 'recharts';
 import { Landmark, TrendingDown, TrendingUp, Wallet, SlidersHorizontal, LayoutDashboard, Repeat, BedDouble, Ruler, Calculator, FileDown, LoaderCircle } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, updateDoc, serverTimestamp, query, orderBy, limit } from 'firebase/firestore';
 
 type MainView = 'dashboard' | 'upfront' | 'recurring';
 type MobileOverlay = 'none' | 'settings';
@@ -68,56 +68,53 @@ const createNewProperty = (name: string): Omit<Property, 'id'> => {
 const propertiesCollection = collection(db, 'properties');
 
 const Dashboard: React.FC = () => {
-  const [properties, setProperties] = useState<Property[]>([]);
+  const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activePropertyId, setActivePropertyId] = useState<string | null>(null);
   const [mainView, setMainView] = useState<MainView>('dashboard');
   const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>('none');
   const [chartRange, setChartRange] = useState<ChartRange>('yearly');
 
-  const addDefaultProperty = useCallback(async () => {
-    const defaultProperty = createNewProperty("示例房产 (Business Bay)");
-    await addDoc(propertiesCollection, defaultProperty);
+  useEffect(() => {
+    const fetchAndInitialize = async () => {
+        try {
+            const q = query(propertiesCollection, orderBy("createdAt", "asc"), limit(1));
+            let querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                const defaultPropertyData = createNewProperty("我的房产");
+                await addDoc(propertiesCollection, defaultPropertyData);
+                // Refetch after adding the default property
+                querySnapshot = await getDocs(q);
+            }
+
+            if (!querySnapshot.empty) {
+                const doc = querySnapshot.docs[0];
+                setProperty({ ...doc.data(), id: doc.id } as Property);
+            }
+        } catch (error) {
+            console.error("从 Firestore 获取房产数据时出错:", error);
+            // Re-throw to be caught by the outer Promise.race().catch()
+            throw error;
+        }
+    };
+    
+    const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('数据加载超时。请检查您的网络连接和Firebase配置。')), 10000)
+    );
+
+    setLoading(true);
+    Promise.race([fetchAndInitialize(), timeoutPromise])
+        .catch(error => {
+            console.error(error);
+        })
+        .finally(() => {
+            setLoading(false);
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const q = query(propertiesCollection, orderBy("createdAt", "asc"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        // 如果是首次加载且数据库为空，则添加一个默认房产
-        if (loading && querySnapshot.empty) {
-            addDefaultProperty();
-            // 立即返回。快照监听器将在添加新房产后再次触发，
-            // 届时我们将把 loading 设置为 false。
-            return;
-        }
 
-        const propsData: Property[] = [];
-        querySnapshot.forEach((doc) => {
-            propsData.push({ ...doc.data(), id: doc.id } as Property);
-        });
-        setProperties(propsData);
-
-        if (loading) {
-            if(propsData.length > 0 && activePropertyId === null) {
-                setActivePropertyId(propsData[0].id);
-            }
-            setLoading(false);
-        }
-
-        // 如果当前选中的房产被其他用户删除了，则更新选中的房产
-        if (activePropertyId && !propsData.some(p => p.id === activePropertyId)) {
-            setActivePropertyId(propsData.length > 0 ? propsData[0].id : null);
-        }
-    }, (error) => {
-        console.error("从 Firestore 获取房产数据时出错:", error);
-        setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [loading, activePropertyId, addDefaultProperty]);
-
-
-  const activeProperty = useMemo(() => properties.find(p => p.id === activePropertyId), [properties, activePropertyId]);
+  const activeProperty = property;
   
   const [estimatedSalePrice, setEstimatedSalePrice] = useState(activeProperty?.settings.propertyValue || 0);
   const [monthsHeld, setMonthsHeld] = useState(60);
@@ -134,49 +131,11 @@ const Dashboard: React.FC = () => {
       const propDoc = doc(db, 'properties', updatedProperty.id);
       const { id, ...dataToUpdate } = updatedProperty;
       await updateDoc(propDoc, dataToUpdate);
+      setProperty(updatedProperty);
   }, []);
-  
-  const handleRenameProperty = useCallback(async (id: string, newName: string) => {
-      const propDoc = doc(db, 'properties', id);
-      await updateDoc(propDoc, { name: newName });
-  }, []);
-
-  const handleAddProperty = useCallback(async () => {
-    const newPropertyName = `新房产 ${properties.length + 1}`;
-    const newPropertyData = createNewProperty(newPropertyName);
-    const docRef = await addDoc(propertiesCollection, newPropertyData);
-    setActivePropertyId(docRef.id);
-  }, [properties.length]);
-
-  const handleDeleteProperty = useCallback(async (id: string) => {
-    if (properties.length <= 1) {
-      alert("为保证应用中有数据可供浏览，无法删除最后一个房产。");
-      return;
-    }
-    
-    if (!window.confirm('您确定要删除此房产吗？此操作无法撤销。')) return;
-    
-    try {
-        // 为了更好的用户体验，在删除前就切换选中的房产
-        if (activePropertyId === id) {
-            const currentIndex = properties.findIndex(p => p.id === id);
-            let newActiveId: string | null = null;
-            if (properties.length > 1) {
-                newActiveId = currentIndex > 0 ? properties[currentIndex - 1].id : properties[1].id;
-            }
-            setActivePropertyId(newActiveId);
-        }
-
-        await deleteDoc(doc(db, 'properties', id));
-    } catch (error) {
-        console.error("删除房产失败:", error);
-        alert("删除房产时出错。请检查您的网络连接或 Firestore 安全规则，然后在控制台中查看详细错误。");
-    }
-  }, [properties, activePropertyId]);
-
 
   const { totals, chartData, totalExpenseForCard, totalDownPayment, detailedPortfolioResults } = useMemo(() => {
-    if (!properties.length) return { 
+    if (!property) return { 
         totals: { recurring: 0, upfront: 0, income: 0, net: 0, propertyValue: 0, totalLoanPayments: 0 }, 
         chartData: [],
         totalExpenseForCard: 0,
@@ -184,52 +143,13 @@ const Dashboard: React.FC = () => {
         detailedPortfolioResults: []
     };
     
-    const portfolioTotals = {
-        recurring: 0,
-        upfront: 0,
-        income: 0,
-        net: 0,
-        propertyValue: 0,
-        totalLoanPayments: 0,
-    };
+    const { totals: propTotals, results } = calculateSimulation(property.settings, property.oneTimeExpenses, property.monthlyInputs);
     
-    let maxTenor = 0;
-    properties.forEach(prop => {
-        if (prop.settings.loanTenorMonths > maxTenor) maxTenor = prop.settings.loanTenorMonths;
-    });
+    const totalDownPayment = property.settings.propertyValue * (property.settings.downPaymentPercent / 100);
 
-    const detailedPortfolioResults: MonthlyData[] = Array.from({ length: maxTenor }, (_, i) => ({
-        monthIndex: i, dewa: 0, ac: 0, serviceFees: 0, otherMaintenance: 0,
-        rentalIncome: 0, loanPayment: 0, oneTimeExpenses: 0
-    }));
+    const maxTenor = property.settings.loanTenorMonths;
 
-    let totalDownPayment = 0;
-
-    properties.forEach(prop => {
-        const { totals: propTotals, results } = calculateSimulation(prop.settings, prop.oneTimeExpenses, prop.monthlyInputs);
-        portfolioTotals.recurring += propTotals.recurring;
-        portfolioTotals.upfront += propTotals.upfront;
-        portfolioTotals.income += propTotals.income;
-        portfolioTotals.net += propTotals.net;
-        portfolioTotals.propertyValue += prop.settings.propertyValue;
-        portfolioTotals.totalLoanPayments += propTotals.totalLoanPayments;
-
-        totalDownPayment += prop.settings.propertyValue * (prop.settings.downPaymentPercent / 100);
-
-        results.forEach((m, idx) => {
-            if (detailedPortfolioResults[idx]) {
-                detailedPortfolioResults[idx].dewa += m.dewa;
-                detailedPortfolioResults[idx].ac += m.ac;
-                detailedPortfolioResults[idx].serviceFees += m.serviceFees;
-                detailedPortfolioResults[idx].otherMaintenance += m.otherMaintenance;
-                detailedPortfolioResults[idx].rentalIncome += m.rentalIncome;
-                detailedPortfolioResults[idx].loanPayment = (detailedPortfolioResults[idx].loanPayment || 0) + (m.loanPayment || 0);
-                detailedPortfolioResults[idx].oneTimeExpenses += m.oneTimeExpenses;
-            }
-        });
-    });
-
-    const combinedMonthlyResultsForChart = detailedPortfolioResults.map(m => ({
+    const combinedMonthlyResultsForChart = results.map(m => ({
         income: m.rentalIncome,
         expense: (m.loanPayment || 0) + m.dewa + m.ac + m.serviceFees + m.otherMaintenance + m.oneTimeExpenses,
     }));
@@ -260,10 +180,15 @@ const Dashboard: React.FC = () => {
         aggregatedData = aggregatedData.slice(0, 60);
     }
     
-    const calculatedTotalExpense = portfolioTotals.recurring + portfolioTotals.upfront - totalDownPayment;
+    const calculatedTotalExpense = propTotals.recurring + propTotals.upfront - totalDownPayment;
 
-    return { totals: portfolioTotals, chartData: aggregatedData, totalExpenseForCard: calculatedTotalExpense, totalDownPayment, detailedPortfolioResults };
-  }, [properties, chartRange]);
+    const finalTotals = {
+      ...propTotals,
+      propertyValue: property.settings.propertyValue
+    };
+
+    return { totals: finalTotals, chartData: aggregatedData, totalExpenseForCard: calculatedTotalExpense, totalDownPayment, detailedPortfolioResults: results };
+  }, [property, chartRange]);
 
   const saleProjection = useMemo(() => {
     if (!activeProperty) {
@@ -341,9 +266,9 @@ const Dashboard: React.FC = () => {
   const renderHeader = () => (
     <div className="p-4 md:p-6 flex justify-between items-center">
         <div>
-            <h1 className="text-xl font-bold text-brand-slate">投资组合概览</h1>
+            <h1 className="text-xl font-bold text-brand-slate">房产收益概览</h1>
             <p className="text-sm text-slate-500">
-                当前房产: <span className="font-semibold text-brand-blue">{activeProperty?.name || '无'}</span>
+                分析您的房产投资回报
             </p>
         </div>
         <div className="md:hidden">
@@ -436,38 +361,22 @@ const Dashboard: React.FC = () => {
   const renderContent = () => {
     if (loading) {
         return (
-            <div className="flex-1 flex items-center justify-center p-4">
-                <div className="text-center text-slate-500 flex flex-col items-center gap-4">
-                    <LoaderCircle className="w-8 h-8 animate-spin text-brand-blue" />
-                    <p className="font-semibold">正在从云端加载数据...</p>
+            <div className="flex-1 flex items-center justify-center p-4 bg-brand-bg">
+                <div className="text-center text-slate-600 flex flex-col items-center gap-4 p-10 bg-white/60 backdrop-blur-md rounded-2xl shadow-lg border border-slate-200">
+                    <LoaderCircle className="w-10 h-10 animate-spin text-brand-blue" />
+                    <h3 className="font-bold text-lg text-brand-slate mt-2">正在加载您的房产数据</h3>
+                    <p className="text-sm text-slate-500">请稍候，我们正在从云端获取最新数据...</p>
                 </div>
             </div>
         );
     }
     
-    if (properties.length === 0) {
-        return (
-             <div className="flex-1 flex items-center justify-center p-4 md:p-8">
-                 <div className="w-full max-w-lg text-center p-10 border-2 border-dashed border-slate-300 rounded-2xl bg-white/50">
-                     <h3 className="font-bold text-xl text-brand-slate mb-2">欢迎使用!</h3>
-                     <p className="text-slate-500 mb-6">您的投资组合是空的，请添加您的第一处房产。</p>
-                     <button 
-                        onClick={handleAddProperty}
-                        className="bg-brand-blue text-white font-semibold px-8 py-3 rounded-lg hover:bg-brand-blue-dark transition-colors shadow-lg shadow-brand-blue/30"
-                     >
-                         添加第一处房产
-                     </button>
-                 </div>
-            </div>
-        );
-    }
-
     if (!activeProperty) {
       return (
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="text-center">
-            <h3 className="font-bold text-lg text-brand-slate mb-2">请选择一处房产</h3>
-            <p className="text-slate-500">从左侧的列表中选择一处房产以查看其详细信息。</p>
+            <h3 className="font-bold text-lg text-brand-slate mb-2">无法加载房产数据</h3>
+            <p className="text-slate-500">请刷新页面或检查您的网络连接与Firebase配置。</p>
           </div>
         </div>
       )
@@ -513,7 +422,7 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div className="bg-gradient-to-br from-brand-blue-light to-white p-4 rounded-xl border border-brand-blue shadow-sm flex flex-col justify-between">
                             <div className="flex justify-between items-start">
-                                <span className="text-xs font-bold text-brand-blue-dark uppercase tracking-wider">投资组合价值</span>
+                                <span className="text-xs font-bold text-brand-blue-dark uppercase tracking-wider">房产价值</span>
                                 <Landmark className="w-5 h-5 text-brand-blue-dark" />
                             </div>
                             <div className="mt-2">
@@ -526,7 +435,7 @@ const Dashboard: React.FC = () => {
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col min-h-[300px] md:min-h-[250px]">
                              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
                                 <div className="flex items-center gap-4">
-                                  <h3 className="text-lg font-bold text-brand-slate">投资组合现金流</h3>
+                                  <h3 className="text-lg font-bold text-brand-slate">现金流</h3>
                                   <button onClick={handleExport} className="flex items-center gap-1.5 text-xs font-semibold text-brand-blue-dark bg-brand-blue-light px-3 py-1.5 rounded-md hover:bg-brand-blue/30 transition-colors">
                                     <FileDown className="w-4 h-4" />
                                     导出Excel
@@ -592,14 +501,8 @@ const Dashboard: React.FC = () => {
     <div className="min-h-screen flex flex-col md:flex-row font-sans text-slate-800 bg-brand-bg">
       <aside className="hidden md:block w-full md:w-80 lg:w-96 flex-shrink-0 bg-white md:h-screen md:sticky top-0 z-20">
         <SettingsPanel 
-            properties={properties} 
-            activePropertyId={activePropertyId} 
             activeProperty={activeProperty} 
             onPropertyChange={handleUpdateProperty} 
-            onSelectProperty={setActivePropertyId}
-            onRenameProperty={handleRenameProperty}
-            onAddProperty={handleAddProperty}
-            onDeleteProperty={handleDeleteProperty}
         />
       </aside>
 
@@ -631,14 +534,8 @@ const Dashboard: React.FC = () => {
       {mobileOverlay === 'settings' && (
           <div className="md:hidden fixed inset-0 bg-white z-50">
              <SettingsPanel 
-                properties={properties} 
-                activePropertyId={activePropertyId} 
                 activeProperty={activeProperty} 
                 onPropertyChange={handleUpdateProperty} 
-                onSelectProperty={setActivePropertyId}
-                onRenameProperty={handleRenameProperty}
-                onAddProperty={handleAddProperty}
-                onDeleteProperty={handleDeleteProperty}
                 onClose={() => setMobileOverlay('none')}
             />
           </div>

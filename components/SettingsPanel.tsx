@@ -1,108 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Property, PropertySettings } from '../types';
-import { Calculator, Percent, ShieldCheck, Banknote, X, Plus, Home, Edit, Trash2 } from 'lucide-react';
-
-interface PropertyManagerProps {
-    properties: Property[];
-    activePropertyId: string | null;
-    onSelect: (id: string) => void;
-    onRename: (id: string, newName: string) => void;
-    onAdd: () => void;
-    onDelete: (id: string) => void;
-}
-
-const PropertyManager: React.FC<PropertyManagerProps> = ({ properties, activePropertyId, onSelect, onRename, onAdd, onDelete }) => {
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [tempName, setTempName] = useState('');
-    const isLastProperty = properties.length <= 1;
-
-    const handleStartEdit = (prop: Property) => {
-        setEditingId(prop.id);
-        setTempName(prop.name);
-    };
-
-    const handleSaveEdit = () => {
-        if (editingId && tempName.trim()) {
-            onRename(editingId, tempName.trim());
-        }
-        setEditingId(null);
-    };
-    
-    return (
-        <div className="mb-6 p-4 bg-brand-blue-light rounded-lg">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-sm font-bold text-brand-blue-dark">我的房产</h3>
-              <button onClick={onAdd} className="flex items-center gap-1 text-xs font-semibold bg-white text-brand-blue-dark px-2 py-1 rounded-md shadow-sm hover:bg-slate-50 transition-colors">
-                  <Plus className="w-3 h-3"/>
-                  添加
-              </button>
-            </div>
-            <div className="space-y-2">
-                {properties.map(prop => (
-                    <div
-                        key={prop.id}
-                        className={`group flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${activePropertyId === prop.id ? 'bg-white shadow-sm' : 'hover:bg-brand-blue-dark/10'} ${isLastProperty ? 'border-2 border-dashed border-slate-300' : ''}`}
-                        onClick={() => onSelect(prop.id)}
-                    >
-                        <div className="flex items-center gap-2">
-                             <Home className={`w-4 h-4 ${activePropertyId === prop.id ? 'text-brand-blue' : 'text-slate-500'}`} />
-                             {editingId === prop.id ? (
-                                 <input 
-                                    type="text"
-                                    value={tempName}
-                                    onChange={(e) => setTempName(e.target.value)}
-                                    onBlur={handleSaveEdit}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                                    className="text-sm font-semibold bg-transparent border-b border-brand-blue focus:outline-none"
-                                    autoFocus
-                                 />
-                             ) : (
-                                <span className="text-sm font-semibold text-slate-800">{prop.name}</span>
-                             )}
-                        </div>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={(e) => { e.stopPropagation(); handleStartEdit(prop); }} className="p-1 hover:text-brand-blue-dark"><Edit className="w-3 h-3"/></button>
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); onDelete(prop.id); }} 
-                                className={`p-1 ${!isLastProperty ? 'hover:text-red-500' : 'text-slate-300 cursor-not-allowed'}`}
-                                disabled={isLastProperty}
-                                title={isLastProperty ? "无法删除最后一个房产" : "删除房产"}
-                            >
-                                <Trash2 className="w-3 h-3"/>
-                            </button>
-                        </div>
-                    </div>
-                ))}
-                 {properties.length === 0 && (
-                    <p className="text-center text-xs text-slate-500 py-4">点击“添加”来创建您的第一处房产。</p>
-                )}
-            </div>
-        </div>
-    );
-};
-
+import { Calculator, Percent, ShieldCheck, Banknote, X } from 'lucide-react';
 
 interface Props {
   activeProperty: Property | undefined;
-  properties: Property[];
-  activePropertyId: string | null;
   onPropertyChange: (updatedProperty: Property) => void;
-  onSelectProperty: (id: string) => void;
-  onRenameProperty: (id: string, newName: string) => void;
-  onAddProperty: () => void;
-  onDeleteProperty: (id: string) => void;
   onClose?: () => void;
 }
 
 const SettingsPanel: React.FC<Props> = ({ 
     activeProperty, 
-    properties, 
-    activePropertyId, 
     onPropertyChange, 
-    onSelectProperty, 
-    onRenameProperty, 
-    onAddProperty, 
-    onDeleteProperty, 
     onClose 
 }) => {
 
@@ -140,18 +48,9 @@ const SettingsPanel: React.FC<Props> = ({
         )}
       </div>
 
-      <PropertyManager 
-        properties={properties}
-        activePropertyId={activePropertyId}
-        onSelect={onSelectProperty}
-        onRename={onRenameProperty}
-        onAdd={onAddProperty}
-        onDelete={onDeleteProperty}
-      />
-      
       {!activeProperty || !settings ? (
         <div className="text-center py-10">
-            <p className="text-slate-500">请选择或添加一处房产以查看详情。</p>
+            <p className="text-slate-500">正在加载房产数据...</p>
         </div>
       ) : (
           <div className="space-y-4">
@@ -168,25 +67,23 @@ const SettingsPanel: React.FC<Props> = ({
                   onChange={(e) => handleChange('address', e.target.value)}
                 />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-                 <div>
-                    <label className="label text-xs font-semibold text-slate-500 uppercase">面积 (平米)</label>
-                    <input 
-                        type="number" 
-                        className="w-full pl-3 pr-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-gold focus:outline-none"
-                        value={settings.areaSqm}
-                        onChange={(e) => handleChange('areaSqm', e.target.value)}
-                    />
-                </div>
-                 <div>
-                    <label className="label text-xs font-semibold text-slate-500 uppercase">卧室数量</label>
-                    <input 
-                        type="number" 
-                        className="w-full pl-3 pr-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-gold focus:outline-none"
-                        value={settings.bedrooms}
-                        onChange={(e) => handleChange('bedrooms', e.target.value)}
-                    />
-                </div>
+            <div>
+                <label className="label text-xs font-semibold text-slate-500 uppercase">面积 (平米)</label>
+                <input 
+                    type="number" 
+                    className="w-full pl-3 pr-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-gold focus:outline-none"
+                    value={settings.areaSqm}
+                    onChange={(e) => handleChange('areaSqm', e.target.value)}
+                />
+            </div>
+            <div>
+                <label className="label text-xs font-semibold text-slate-500 uppercase">卧室数量</label>
+                <input 
+                    type="number" 
+                    className="w-full pl-3 pr-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-gold focus:outline-none"
+                    value={settings.bedrooms}
+                    onChange={(e) => handleChange('bedrooms', e.target.value)}
+                />
             </div>
             <div className="form-control">
               <label className="label text-xs font-semibold text-slate-500 uppercase">房产总价 (AED)</label>
